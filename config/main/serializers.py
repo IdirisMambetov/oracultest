@@ -3,8 +3,8 @@ from rest_framework import serializers
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.core.mail import send_mail
 from django.conf import settings
-from .models import House, Apartment
 from django.contrib.auth import authenticate
+from .models import Apartment, House
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -36,48 +36,62 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         return user
 
+
+
+
+
 class ActivateAccountSerializer(serializers.Serializer):
+    uid = serializers.CharField()
     token = serializers.CharField()
 
-    def validate_token(self, value):
+    def validate(self, attrs):
+        uid = attrs.get('uid')
+        token = attrs.get('token')
         try:
-            RefreshToken(value)
-        except:
-            raise serializers.ValidationError("Недействительный или просроченный токен")
-        return value
+            user = User.objects.get(pk=uid)
+        except User.DoesNotExist:
+            raise serializers.ValidationError('Неверный uid или токен')
 
-    def save(self):
-        token = self.validated_data['token']
-        user = RefreshToken(token).user
-        user.is_active = True
-        user.save()
+        if not user.is_active:
+            user.is_active = True
+            user.save()
+        else:
+            raise serializers.ValidationError('Аккаунт уже активирован')
+
+        return attrs
+
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
-    password = serializers.CharField()
+    password = serializers.CharField(write_only=True)
 
     def validate(self, data):
-        username = data.get("username")
-        password = data.get("password")
+        username = data.get('username')
+        password = data.get('password')
 
         if username and password:
-            user = authenticate(username=username, password=password)
-            if user:
-                if not user.is_active:
-                    raise serializers.ValidationError("Учетная запись пользователя не активирована.")
-                return user
-            else:
-                raise serializers.ValidationError("Неверные логин или пароль.")
+            user = authenticate(request=self.context.get('request'), username=username, password=password)
+
+            if not user:
+                raise serializers.ValidationError("Некорректные учетные данные")
+
+            if not user.is_active:
+                raise serializers.ValidationError("Этот аккаунт неактивен")
+
         else:
-            raise serializers.ValidationError("Должен включать «имя пользователя» и «пароль»'.")
+            raise serializers.ValidationError("Необходимо указать 'username' и 'password'")
+
+        data['user'] = user
+        return data
 
     def create(self, validated_data):
-        user = validated_data
+        user = validated_data['user']
         refresh = RefreshToken.for_user(user)
         return {
             'refresh': str(refresh),
             'access': str(refresh.access_token),
         }
+
 
 
 class HouseSerializer(serializers.ModelSerializer):
@@ -89,3 +103,21 @@ class ApartmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Apartment
         fields = '__all__'
+
+
+from rest_framework import serializers
+from .models import Apartment, House
+
+class BookingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Apartment  # или House
+        fields = ['is_booked', 'booked_by']
+
+    def update(self, instance, validated_data):
+        instance.is_booked = validated_data.get('is_booked', instance.is_booked)
+        instance.booked_by = validated_data.get('booked_by', instance.booked_by)
+        instance.save()
+        return instance
+
+
+

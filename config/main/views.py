@@ -1,15 +1,17 @@
-from .serializers import RegisterSerializer, ActivateAccountSerializer, LoginSerializer
+from .serializers import RegisterSerializer
 from django.contrib.auth.models import User
-from rest_framework import viewsets, permissions, generics, status
-from rest_framework.response import Response
+from rest_framework import viewsets, permissions
 from django_filters import rest_framework as filters
 from .models import House, Apartment
-from .serializers import HouseSerializer, ApartmentSerializer
-
+from .serializers import HouseSerializer, ApartmentSerializer, BookingSerializer
 from django.urls import reverse
 from django.contrib.auth.views import LoginView as AuthLoginView
+from .serializers import ActivateAccountSerializer
 
 
+from rest_framework import generics, status
+from rest_framework.response import Response
+from .serializers import LoginSerializer
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
@@ -25,14 +27,14 @@ class ActivateAccountView(generics.GenericAPIView):
         return Response({'message': 'Аккаунт успешно активирован'}, status=status.HTTP_200_OK)
 
 
+#
 class LoginView(generics.GenericAPIView):
     serializer_class = LoginSerializer
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.validated_data
-        tokens = serializer.create(user)
+        tokens = serializer.save()
         return Response(tokens, status=status.HTTP_200_OK)
 
 
@@ -56,6 +58,42 @@ class ApartmentViewSet(viewsets.ModelViewSet):
     serializer_class = ApartmentSerializer
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     filterset_class = ApartmentFilter
+
+class BookingView(generics.UpdateAPIView):
+    queryset = House.objects.all()
+    serializer_class = BookingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.is_booked:
+            return Response({"detail": "Дом уже забронирован."}, status=status.HTTP_400_BAD_REQUEST)
+
+        instance.is_booked = True
+        instance.booked_by = request.user
+        instance.save()
+        return Response({"detail": "Дом успешно забронирован."}, status=status.HTTP_200_OK)
+
+
+class CancelHouseBookingView(generics.UpdateAPIView):
+    queryset = House.objects.all()
+    serializer_class = BookingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if not instance.is_booked:
+            return Response({"detail": "Дом не забронирован."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.user != instance.booked_by and not request.user.is_staff:
+            return Response({"detail": "У вас нет разрешения на отмену этого бронирования."},
+                            status=status.HTTP_403_FORBIDDEN)
+
+        instance.is_booked = False
+        instance.booked_by = None
+        instance.save()
+        return Response({"detail": "Бронирование успешно отменено."}, status=status.HTTP_200_OK)
+
 
 
 class BookApartmentView(generics.UpdateAPIView):
