@@ -20,5 +20,3 @@ class ApartmentAdmin(admin.ModelAdmin):
 
 admin.site.register(House, HouseAdmin)
 admin.site.register(Apartment, ApartmentAdmin)
-
-# Register your models here.

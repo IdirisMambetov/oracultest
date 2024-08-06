@@ -3,15 +3,13 @@ from django.contrib.auth.models import User
 from rest_framework import viewsets, permissions
 from django_filters import rest_framework as filters
 from .models import House, Apartment
-from .serializers import HouseSerializer, ApartmentSerializer, BookingSerializer
+from .serializers import HouseSerializer, ApartmentSerializer, BookingSerializer, ActivateAccountSerializer, LoginSerializer
 from django.urls import reverse
 from django.contrib.auth.views import LoginView as AuthLoginView
-from .serializers import ActivateAccountSerializer
-
-
 from rest_framework import generics, status
 from rest_framework.response import Response
-from .serializers import LoginSerializer
+
+
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
